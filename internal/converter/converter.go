@@ -47,19 +47,20 @@ type Converter struct {
 
 // ConverterFlags control the behaviour of the converter:
 type ConverterFlags struct {
-	AllFieldsRequired            bool
-	AllowNullValues              bool
-	DisallowAdditionalProperties bool
-	DisallowBigIntsAsStrings     bool
-	EnforceOneOf                 bool
-	EnumsAsConstants             bool
-	EnumsAsStringsOnly           bool
-	EnumsTrimPrefix              bool
-	KeepNewLinesInDescription    bool
-	PrefixSchemaFilesWithPackage bool
-	UseJSONFieldnamesOnly        bool
-	UseProtoAndJSONFieldNames    bool
-	TypeNamesWithNoPackage       bool
+	AllFieldsRequired              bool
+	AllowNullValues                bool
+	DisallowAdditionalProperties   bool
+	DisallowBigIntsAsStrings       bool
+	EnforceOneOf                   bool
+	EnumsAsConstants               bool
+	EnumsAsStringsOnly             bool
+	EnumsTrimPrefix                bool
+	EnumsValueDescriptionsInParent bool
+	KeepNewLinesInDescription      bool
+	PrefixSchemaFilesWithPackage   bool
+	UseJSONFieldnamesOnly          bool
+	UseProtoAndJSONFieldNames      bool
+	TypeNamesWithNoPackage         bool
 }
 
 // New returns a configured *Converter (defaulting to draft-04 version):
@@ -113,6 +114,8 @@ func (c *Converter) parseGeneratorParameters(parameters string) {
 			c.Flags.EnumsAsStringsOnly = true
 		case "enums_trim_prefix":
 			c.Flags.EnumsTrimPrefix = true
+		case "enums_value_descriptions_in_parent":
+			c.Flags.EnumsValueDescriptionsInParent = true
 		case "json_fieldnames":
 			c.Flags.UseJSONFieldnamesOnly = true
 		case "prefix_schema_files_with_package":
@@ -148,6 +151,7 @@ func (c *Converter) convertEnumType(enum *descriptor.EnumDescriptorProto, conver
 
 	// Inherit the CLI converterFlags:
 	converterFlags.EnumsAsStringsOnly = c.Flags.EnumsAsStringsOnly
+	converterFlags.EnumsValueDescriptionsInParent = c.Flags.EnumsValueDescriptionsInParent
 
 	// Set some per-enum flags from config and options:
 	if opts := enum.GetOptions(); opts != nil && proto.HasExtension(opts, protoc_gen_jsonschema.E_EnumOptions) {
@@ -169,6 +173,12 @@ func (c *Converter) convertEnumType(enum *descriptor.EnumDescriptorProto, conver
 					converterFlags.EnumsTrimPrefix = true
 				}
 
+				// ENUM values descriptions in parent:
+				// TODO: uncomment after regenerating options.proto to options.pb.go
+				// if enumOptions.GetEnumsValueDescriptionsInParent() {
+				// 	converterFlags.EnumsValueDescriptionsInParent = true
+				// }
+
 				// If this particular ENUM is marked with the "ignore" option then return a skipped error:
 				if enumOptions.GetIgnore() {
 					c.logger.WithField("msg_name", enum.GetName()).Debug("Skipping ignored enum")
@@ -179,8 +189,11 @@ func (c *Converter) convertEnumType(enum *descriptor.EnumDescriptorProto, conver
 	}
 
 	// Generate a description from src comments (if available):
+	var descriptionBuilder strings.Builder
 	if src := c.sourceInfo.GetEnum(enum); src != nil {
-		jsonSchemaType.Title, jsonSchemaType.Description = c.formatTitleAndDescription(strPtr(enum.GetName()), src)
+		var description string
+		jsonSchemaType.Title, description = c.formatTitleAndDescription(strPtr(enum.GetName()), src)
+		descriptionBuilder.WriteString(description)
 	}
 
 	// Use basic types if we're not opting to use constants for ENUMs:
@@ -221,6 +234,16 @@ func (c *Converter) convertEnumType(enum *descriptor.EnumDescriptorProto, conver
 			valueName = strings.TrimPrefix(valueName, enumNamePrefix)
 		}
 
+		if converterFlags.EnumsValueDescriptionsInParent && valueDescription != "" {
+			if descriptionBuilder.Len() > 0 {
+				descriptionBuilder.WriteString("\n\n")
+			}
+
+			descriptionBuilder.WriteString(valueName)
+			descriptionBuilder.WriteString(": ")
+			descriptionBuilder.WriteString(valueDescription)
+		}
+
 		// If we're using constants for ENUMs then add these here, along with their title:
 		if converterFlags.EnumsAsConstants {
 			c.schemaVersion = versionDraft06 // Const requires draft-06
@@ -236,6 +259,8 @@ func (c *Converter) convertEnumType(enum *descriptor.EnumDescriptorProto, conver
 			jsonSchemaType.Enum = append(jsonSchemaType.Enum, value.Number)
 		}
 	}
+
+	jsonSchemaType.Description = descriptionBuilder.String()
 
 	return jsonSchemaType, nil
 }
