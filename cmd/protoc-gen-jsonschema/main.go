@@ -48,8 +48,10 @@ func main() {
 		ok = false
 		if res == nil {
 			message := fmt.Sprintf("Failed to read input: %v", err)
+			supportedFeatures := uint64(plugin.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
 			res = &plugin.CodeGeneratorResponse{
-				Error: &message,
+				Error:             &message,
+				SupportedFeatures: &supportedFeatures,
 			}
 		}
 	}
