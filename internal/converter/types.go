@@ -151,10 +151,12 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 		// Custom field options from protoc-gen-jsonschema:
 		if opt := proto.GetExtension(desc.GetOptions(), protoc_gen_jsonschema.E_FieldOptions); opt != nil {
 			if fieldOptions, ok := opt.(*protoc_gen_jsonschema.FieldOptions); ok {
-				minLength := uint64(fieldOptions.GetMinLength())
-				stringDef.MinLength = &minLength
-				maxLength := uint64(fieldOptions.GetMaxLength())
-				stringDef.MaxLength = &maxLength
+				if minLength := uint64(fieldOptions.GetMinLength()); minLength > 0 {
+					stringDef.MinLength = &minLength
+				}
+				if maxLength := uint64(fieldOptions.GetMaxLength()); maxLength > 0 {
+					stringDef.MaxLength = &maxLength
+				}
 				stringDef.Pattern = fieldOptions.GetPattern()
 			}
 		}
@@ -163,10 +165,8 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 		if opt := proto.GetExtension(desc.GetOptions(), protoc_gen_validate.E_Rules); opt != nil {
 			if fieldRules, ok := opt.(*protoc_gen_validate.FieldRules); fieldRules != nil && ok {
 				if stringRules := fieldRules.GetString_(); stringRules != nil {
-					maxLength := stringRules.GetMaxLen()
-					stringDef.MaxLength = &maxLength
-					minLength := stringRules.GetMinLen()
-					stringDef.MinLength = &minLength
+					stringDef.MaxLength = stringRules.MaxLen
+					stringDef.MinLength = stringRules.MinLen
 					stringDef.Pattern = stringRules.GetPattern()
 				}
 			}
