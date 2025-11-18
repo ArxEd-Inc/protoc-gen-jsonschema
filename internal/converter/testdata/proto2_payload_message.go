@@ -2,8 +2,8 @@ package testdata
 
 const Proto2PayloadMessage = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/Proto2PayloadMessage",
-    "definitions": {
+    "$ref": "#/$defs/Proto2PayloadMessage",
+    "$defs": {
         "Proto2PayloadMessage": {
             "required": [
                 "name",

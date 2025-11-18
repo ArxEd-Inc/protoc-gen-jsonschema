@@ -2,8 +2,8 @@ package testdata
 
 const Maps = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/Maps",
-    "definitions": {
+    "$ref": "#/$defs/Maps",
+    "$defs": {
         "Maps": {
             "properties": {
                 "map_of_strings": {
@@ -20,7 +20,7 @@ const Maps = `{
                 },
                 "map_of_messages": {
                     "additionalProperties": {
-                        "$ref": "#/definitions/samples.PayloadMessage",
+                        "$ref": "#/$defs/samples.PayloadMessage",
                         "additionalProperties": true
                     },
                     "type": "object"

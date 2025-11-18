@@ -2,15 +2,15 @@ package testdata
 
 const Proto2NestedMessage = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/Proto2NestedMessage",
-    "definitions": {
+    "$ref": "#/$defs/Proto2NestedMessage",
+    "$defs": {
         "Proto2NestedMessage": {
             "required": [
                 "payload"
             ],
             "properties": {
                 "payload": {
-                    "$ref": "#/definitions/samples.Proto2PayloadMessage",
+                    "$ref": "#/$defs/samples.Proto2PayloadMessage",
                     "additionalProperties": false
                 },
                 "description": {

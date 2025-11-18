@@ -2,8 +2,8 @@ package testdata
 
 const EnumCeption = `{
     "$schema": "http://json-schema.org/draft-06/schema#",
-    "$ref": "#/definitions/Enumception",
-    "definitions": {
+    "$ref": "#/$defs/Enumception",
+    "$defs": {
         "Enumception": {
             "properties": {
                 "name": {
@@ -40,12 +40,12 @@ const EnumCeption = `{
                     "description": "FailureModes enum"
                 },
                 "payload": {
-                    "$ref": "#/definitions/samples.PayloadMessage",
+                    "$ref": "#/$defs/samples.PayloadMessage",
                     "additionalProperties": true
                 },
                 "payloads": {
                     "items": {
-                        "$ref": "#/definitions/samples.PayloadMessage"
+                        "$ref": "#/$defs/samples.PayloadMessage"
                     },
                     "type": "array"
                 },

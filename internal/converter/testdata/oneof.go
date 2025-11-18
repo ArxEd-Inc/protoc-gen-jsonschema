@@ -2,19 +2,19 @@ package testdata
 
 const OneOf = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/OneOf",
-    "definitions": {
+    "$ref": "#/$defs/OneOf",
+    "$defs": {
         "OneOf": {
             "required": [
                 "something"
             ],
             "properties": {
                 "bar": {
-                    "$ref": "#/definitions/samples.OneOf.Bar",
+                    "$ref": "#/$defs/samples.OneOf.Bar",
                     "additionalProperties": true
                 },
                 "baz": {
-                    "$ref": "#/definitions/samples.OneOf.Baz",
+                    "$ref": "#/$defs/samples.OneOf.Baz",
                     "additionalProperties": true
                 },
                 "something": {

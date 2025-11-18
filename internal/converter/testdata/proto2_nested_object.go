@@ -2,8 +2,8 @@ package testdata
 
 const Proto2NestedObject = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/Proto2NestedObject",
-    "definitions": {
+    "$ref": "#/$defs/Proto2NestedObject",
+    "$defs": {
         "Proto2NestedObject": {
             "required": [
                 "payload",
@@ -11,7 +11,7 @@ const Proto2NestedObject = `{
             ],
             "properties": {
                 "payload": {
-                    "$ref": "#/definitions/samples.Proto2NestedObject.NestedPayload",
+                    "$ref": "#/$defs/samples.Proto2NestedObject.NestedPayload",
                     "additionalProperties": false
                 },
                 "description": {

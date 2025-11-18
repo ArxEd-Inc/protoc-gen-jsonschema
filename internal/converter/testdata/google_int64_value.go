@@ -2,8 +2,8 @@ package testdata
 
 const GoogleInt64Value = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/GoogleInt64Value",
-    "definitions": {
+    "$ref": "#/$defs/GoogleInt64Value",
+    "$defs": {
         "GoogleInt64Value": {
             "properties": {
                 "big_number": {

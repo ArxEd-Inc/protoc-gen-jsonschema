@@ -2,8 +2,8 @@ package testdata
 
 const ValidationOptions = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/ValidationOptions",
-    "definitions": {
+    "$ref": "#/$defs/ValidationOptions",
+    "$defs": {
         "ValidationOptions": {
             "properties": {
                 "stringWithLengthConstraints": {

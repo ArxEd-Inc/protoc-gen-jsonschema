@@ -2,8 +2,8 @@ package testdata
 
 const JSONFields = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/JSONFields",
-    "definitions": {
+    "$ref": "#/$defs/JSONFields",
+    "$defs": {
         "JSONFields": {
             "required": [
                 "otherNumb"

@@ -2,8 +2,8 @@ package testdata
 
 const OptionMinLength = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/OptionMinLength",
-    "definitions": {
+    "$ref": "#/$defs/OptionMinLength",
+    "$defs": {
         "OptionMinLength": {
             "required": [
                 "query"

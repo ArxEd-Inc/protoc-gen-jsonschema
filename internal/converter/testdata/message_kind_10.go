@@ -2,8 +2,8 @@ package testdata
 
 const MessageKind10 = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/MessageKind10",
-    "definitions": {
+    "$ref": "#/$defs/MessageKind10",
+    "$defs": {
         "MessageKind10": {
             "properties": {
                 "name": {

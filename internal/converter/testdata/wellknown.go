@@ -2,8 +2,8 @@ package testdata
 
 const WellKnown = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/WellKnown",
-    "definitions": {
+    "$ref": "#/$defs/WellKnown",
+    "$defs": {
         "WellKnown": {
             "properties": {
                 "string_value": {

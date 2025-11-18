@@ -2,8 +2,8 @@ package testdata
 
 const GoogleInt64ValueDisallowStringAllowNull = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/GoogleInt64ValueDisallowStringAllowNull",
-    "definitions": {
+    "$ref": "#/$defs/GoogleInt64ValueDisallowStringAllowNull",
+    "$defs": {
         "GoogleInt64ValueDisallowStringAllowNull": {
             "properties": {
                 "big_number": {

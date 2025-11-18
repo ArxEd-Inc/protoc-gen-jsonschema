@@ -2,8 +2,8 @@ package testdata
 
 const OptionIgnoredField = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/OptionIgnoredField",
-    "definitions": {
+    "$ref": "#/$defs/OptionIgnoredField",
+    "$defs": {
         "OptionIgnoredField": {
             "properties": {
                 "visible1": {

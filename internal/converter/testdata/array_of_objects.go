@@ -2,8 +2,8 @@ package testdata
 
 const ArrayOfObjects = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/ArrayOfObjects",
-    "definitions": {
+    "$ref": "#/$defs/ArrayOfObjects",
+    "$defs": {
         "ArrayOfObjects": {
             "properties": {
                 "description": {
@@ -23,7 +23,7 @@ const ArrayOfObjects = `{
                         },
                         {
                             "items": {
-                                "$ref": "#/definitions/samples.ArrayOfObjects.RepeatedPayload"
+                                "$ref": "#/$defs/samples.ArrayOfObjects.RepeatedPayload"
                             },
                             "type": "array"
                         }

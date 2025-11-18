@@ -2,8 +2,8 @@ package testdata
 
 const FileOptions = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/FileOptions",
-    "definitions": {
+    "$ref": "#/$defs/FileOptions",
+    "$defs": {
         "FileOptions": {
             "properties": {
                 "ignore": {

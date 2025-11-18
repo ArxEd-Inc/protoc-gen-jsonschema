@@ -2,8 +2,8 @@ package testdata
 
 const FirstMessage = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/FirstMessage",
-    "definitions": {
+    "$ref": "#/$defs/FirstMessage",
+    "$defs": {
         "FirstMessage": {
             "properties": {
                 "name1": {

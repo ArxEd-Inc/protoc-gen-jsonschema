@@ -2,8 +2,8 @@ package testdata
 
 const MessageOptions = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/MessageOptions",
-    "definitions": {
+    "$ref": "#/$defs/MessageOptions",
+    "$defs": {
         "MessageOptions": {
             "properties": {
                 "ignore": {

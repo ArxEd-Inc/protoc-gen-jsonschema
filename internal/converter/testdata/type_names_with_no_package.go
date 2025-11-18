@@ -2,8 +2,8 @@ package testdata
 
 const TypeNamesWithNoPackage = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/ArrayOfMessages",
-    "definitions": {
+    "$ref": "#/$defs/ArrayOfMessages",
+    "$defs": {
         "ArrayOfMessages": {
             "properties": {
                 "description": {
@@ -11,7 +11,7 @@ const TypeNamesWithNoPackage = `{
                 },
                 "payload": {
                     "items": {
-                        "$ref": "#/definitions/PayloadMessage"
+                        "$ref": "#/$defs/PayloadMessage"
                     },
                     "type": "array"
                 }

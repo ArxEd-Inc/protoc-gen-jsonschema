@@ -2,27 +2,27 @@ package testdata
 
 const MessageKind12 = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/MessageKind12",
-    "definitions": {
+    "$ref": "#/$defs/MessageKind12",
+    "$defs": {
         "MessageKind12": {
             "properties": {
                 "name": {
                     "type": "string"
                 },
                 "f": {
-                    "$ref": "#/definitions/samples.MessageKind11",
+                    "$ref": "#/$defs/samples.MessageKind11",
                     "additionalProperties": true
                 },
                 "kind5": {
-                    "$ref": "#/definitions/samples.MessageKind5",
+                    "$ref": "#/$defs/samples.MessageKind5",
                     "additionalProperties": true
                 },
                 "kind6": {
-                    "$ref": "#/definitions/samples.MessageKind6",
+                    "$ref": "#/$defs/samples.MessageKind6",
                     "additionalProperties": true
                 },
                 "kind7": {
-                    "$ref": "#/definitions/samples.MessageKind7",
+                    "$ref": "#/$defs/samples.MessageKind7",
                     "additionalProperties": true
                 }
             },
@@ -59,20 +59,20 @@ const MessageKind12 = `{
                 },
                 "ones": {
                     "items": {
-                        "$ref": "#/definitions/samples.MessageKind1"
+                        "$ref": "#/$defs/samples.MessageKind1"
                     },
                     "type": "array"
                 },
                 "kind2": {
-                    "$ref": "#/definitions/samples.MessageKind2",
+                    "$ref": "#/$defs/samples.MessageKind2",
                     "additionalProperties": true
                 },
                 "kind3": {
-                    "$ref": "#/definitions/samples.MessageKind3",
+                    "$ref": "#/$defs/samples.MessageKind3",
                     "additionalProperties": true
                 },
                 "kind4": {
-                    "$ref": "#/definitions/samples.MessageKind4",
+                    "$ref": "#/$defs/samples.MessageKind4",
                     "additionalProperties": true
                 }
             },

@@ -2,8 +2,8 @@ package testdata
 
 const Proto2Required = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/Proto2Required",
-    "definitions": {
+    "$ref": "#/$defs/Proto2Required",
+    "$defs": {
         "Proto2Required": {
             "required": [
                 "query"

@@ -2,8 +2,8 @@ package testdata
 
 const OptionAllowNullValues = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/OptionAllowNullValues",
-    "definitions": {
+    "$ref": "#/$defs/OptionAllowNullValues",
+    "$defs": {
         "OptionAllowNullValues": {
             "properties": {
                 "name2": {

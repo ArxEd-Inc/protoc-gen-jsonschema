@@ -2,12 +2,12 @@ package testdata
 
 const NestedObject = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/NestedObject",
-    "definitions": {
+    "$ref": "#/$defs/NestedObject",
+    "$defs": {
         "NestedObject": {
             "properties": {
                 "payload": {
-                    "$ref": "#/definitions/samples.NestedObject.NestedPayload",
+                    "$ref": "#/$defs/samples.NestedObject.NestedPayload",
                     "additionalProperties": true
                 },
                 "description": {

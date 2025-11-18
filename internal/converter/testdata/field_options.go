@@ -2,8 +2,8 @@ package testdata
 
 const FieldOptions = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/FieldOptions",
-    "definitions": {
+    "$ref": "#/$defs/FieldOptions",
+    "$defs": {
         "FieldOptions": {
             "properties": {
                 "ignore": {

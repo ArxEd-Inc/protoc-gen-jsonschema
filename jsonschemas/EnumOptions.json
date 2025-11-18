@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/EnumOptions",
-    "definitions": {
+    "$ref": "#/$defs/EnumOptions",
+    "$defs": {
         "EnumOptions": {
             "properties": {
                 "enums_as_constants": {

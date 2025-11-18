@@ -2,8 +2,8 @@ package testdata
 
 const OptionEnumsAsConstants = `{
     "$schema": "http://json-schema.org/draft-06/schema#",
-    "$ref": "#/definitions/OptionEnumsAsConstants",
-    "definitions": {
+    "$ref": "#/$defs/OptionEnumsAsConstants",
+    "$defs": {
         "OptionEnumsAsConstants": {
             "properties": {
                 "importedEnum": {

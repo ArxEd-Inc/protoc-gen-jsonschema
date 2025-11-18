@@ -2,8 +2,8 @@ package testdata
 
 const OptionRequiredField = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/OptionRequiredField",
-    "definitions": {
+    "$ref": "#/$defs/OptionRequiredField",
+    "$defs": {
         "OptionRequiredField": {
             "required": [
                 "query",

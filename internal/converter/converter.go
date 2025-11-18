@@ -26,7 +26,7 @@ const (
 	defaultExcludeCommentToken = "@exclude"
 	defaultFileExtension       = "json"
 	defaultPackageName         = "package"
-	defaultRefPrefix           = "#/definitions/"
+	defaultRefPrefix           = "#/$defs/"
 	messageDelimiter           = "+"
 	versionDraft04             = "http://json-schema.org/draft-04/schema#"
 	versionDraft06             = "http://json-schema.org/draft-06/schema#"

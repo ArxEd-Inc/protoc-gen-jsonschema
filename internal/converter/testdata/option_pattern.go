@@ -2,8 +2,8 @@ package testdata
 
 const OptionPattern = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/OptionPattern",
-    "definitions": {
+    "$ref": "#/$defs/OptionPattern",
+    "$defs": {
         "OptionPattern": {
             "required": [
                 "query"

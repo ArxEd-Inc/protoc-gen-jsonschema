@@ -2,12 +2,12 @@ package testdata
 
 const NestedMessage = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/NestedMessage",
-    "definitions": {
+    "$ref": "#/$defs/NestedMessage",
+    "$defs": {
         "NestedMessage": {
             "properties": {
                 "payload": {
-                    "$ref": "#/definitions/samples.PayloadMessage",
+                    "$ref": "#/$defs/samples.PayloadMessage",
                     "additionalProperties": true
                 },
                 "description": {

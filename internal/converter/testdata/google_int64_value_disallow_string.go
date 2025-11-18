@@ -2,8 +2,8 @@ package testdata
 
 const GoogleInt64ValueDisallowString = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/GoogleInt64ValueDisallowString",
-    "definitions": {
+    "$ref": "#/$defs/GoogleInt64ValueDisallowString",
+    "$defs": {
         "GoogleInt64ValueDisallowString": {
             "properties": {
                 "big_number": {

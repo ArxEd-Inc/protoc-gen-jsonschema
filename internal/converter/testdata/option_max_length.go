@@ -2,8 +2,8 @@ package testdata
 
 const OptionMaxLength = `{
     "$schema": "http://json-schema.org/draft-04/schema#",
-    "$ref": "#/definitions/OptionMaxLength",
-    "definitions": {
+    "$ref": "#/$defs/OptionMaxLength",
+    "$defs": {
         "OptionMaxLength": {
             "required": [
                 "query"
