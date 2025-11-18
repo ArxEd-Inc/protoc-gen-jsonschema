@@ -14,6 +14,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
+	descriptor "google.golang.org/protobuf/types/descriptorpb"
 	plugin "google.golang.org/protobuf/types/pluginpb"
 
 	"github.com/chrusty/protoc-gen-jsonschema/internal/converter"
@@ -48,10 +49,13 @@ func main() {
 		ok = false
 		if res == nil {
 			message := fmt.Sprintf("Failed to read input: %v", err)
-			supportedFeatures := uint64(plugin.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL)
+			supportedFeatures := uint64(plugin.CodeGeneratorResponse_FEATURE_PROTO3_OPTIONAL | plugin.CodeGeneratorResponse_FEATURE_SUPPORTS_EDITIONS)
+			edition := int32(descriptor.Edition_EDITION_PROTO3)
 			res = &plugin.CodeGeneratorResponse{
 				Error:             &message,
 				SupportedFeatures: &supportedFeatures,
+				MinimumEdition:    &edition,
+				MaximumEdition:    &edition,
 			}
 		}
 	}
