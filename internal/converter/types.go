@@ -1,12 +1,14 @@
 package converter
 
 import (
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	protovalidate "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"github.com/invopop/jsonschema"
-	"github.com/wk8/go-ordered-map/v2"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"github.com/xeipuuv/gojsonschema"
 	"google.golang.org/protobuf/proto"
 	descriptor "google.golang.org/protobuf/types/descriptorpb"
@@ -84,6 +86,63 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 		jsonSchemaType.Title, jsonSchemaType.Description = c.formatTitleAndDescription(nil, src)
 	}
 
+	// Helper to get the concrete (non-null) schema when nullable oneOf is used
+	getTargetSchema := func(s *jsonschema.Schema) *jsonschema.Schema {
+		if len(s.OneOf) > 0 {
+			for _, sub := range s.OneOf {
+				if sub != nil && sub.Type != gojsonschema.TYPE_NULL {
+					return sub
+				}
+			}
+		}
+		return s
+	}
+
+	// Helper functions to construct json.Number
+	numberFromFloat64 := func(f float64) json.Number {
+		return json.Number(strconv.FormatFloat(f, 'g', -1, 64))
+	}
+	numberFromFloat32 := func(f float32) json.Number {
+		// Use bitSize 32 to retain float32 precision characteristics
+		return json.Number(strconv.FormatFloat(float64(f), 'g', -1, 32))
+	}
+	numberFromInt64 := func(i int64) json.Number { return json.Number(strconv.FormatInt(i, 10)) }
+	numberFromUint64 := func(u uint64) json.Number { return json.Number(strconv.FormatUint(u, 10)) }
+	numberFromAny := func(v any) json.Number {
+		switch x := v.(type) {
+		case int:
+			return numberFromInt64(int64(x))
+		case int32:
+			return numberFromInt64(int64(x))
+		case int64:
+			return numberFromInt64(x)
+		case int8:
+			return numberFromInt64(int64(x))
+		case int16:
+			return numberFromInt64(int64(x))
+		case uint:
+			return numberFromUint64(uint64(x))
+		case uint32:
+			return numberFromUint64(uint64(x))
+		case uint64:
+			return numberFromUint64(x)
+		case uint8:
+			return numberFromUint64(uint64(x))
+		case uint16:
+			return numberFromUint64(uint64(x))
+		case float32:
+			return numberFromFloat32(x)
+		case float64:
+			return numberFromFloat64(x)
+		case json.Number:
+			return x
+		default:
+			// Fallback: this path should not be used for protovalidate numeric constraints.
+			// Return zero as a safe default without using fmt.
+			return json.Number("0")
+		}
+	}
+
 	// Switch the types, and pick a JSONSchema equivalent:
 	switch desc.GetType() {
 
@@ -99,6 +158,78 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 			jsonSchemaType.Type = gojsonschema.TYPE_NUMBER
 		}
 
+		// protovalidate: Double/Float simple rules -> JSON Schema
+		if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+			if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+				t := getTargetSchema(jsonSchemaType)
+				if dr := fieldRules.GetDouble(); dr != nil {
+					if dr.Const != nil {
+						t.Const = *dr.Const
+					}
+					// lt / lte
+					switch v := dr.GetLessThan().(type) {
+					case *protovalidate.DoubleRules_Lt:
+						t.ExclusiveMaximum = numberFromFloat64(v.Lt)
+					case *protovalidate.DoubleRules_Lte:
+						t.Maximum = numberFromFloat64(v.Lte)
+					}
+					// gt / gte
+					switch v := dr.GetGreaterThan().(type) {
+					case *protovalidate.DoubleRules_Gt:
+						t.ExclusiveMinimum = numberFromFloat64(v.Gt)
+					case *protovalidate.DoubleRules_Gte:
+						t.Minimum = numberFromFloat64(v.Gte)
+					}
+					// in -> enum
+					if len(dr.In) > 0 {
+						for _, x := range dr.In {
+							t.Enum = append(t.Enum, x)
+						}
+					}
+					// not_in -> not: { enum }
+					if len(dr.NotIn) > 0 {
+						ns := &jsonschema.Schema{}
+						for _, x := range dr.NotIn {
+							ns.Enum = append(ns.Enum, x)
+						}
+						t.Not = ns
+					}
+				} else if fr := fieldRules.GetFloat(); fr != nil {
+					if fr.Const != nil {
+						t.Const = *fr.Const
+					}
+					// lt / lte
+					switch v := fr.GetLessThan().(type) {
+					case *protovalidate.FloatRules_Lt:
+						t.ExclusiveMaximum = numberFromFloat32(v.Lt)
+					case *protovalidate.FloatRules_Lte:
+						t.Maximum = numberFromFloat32(v.Lte)
+					}
+					// gt / gte
+					switch v := fr.GetGreaterThan().(type) {
+					case *protovalidate.FloatRules_Gt:
+						t.ExclusiveMinimum = numberFromFloat32(v.Gt)
+					case *protovalidate.FloatRules_Gte:
+						t.Minimum = numberFromFloat32(v.Gte)
+					}
+					// in -> enum
+					if len(fr.In) > 0 {
+						for _, x := range fr.In {
+							t.Enum = append(t.Enum, x)
+						}
+					}
+					// not_in -> not: { enum }
+					if len(fr.NotIn) > 0 {
+						ns := &jsonschema.Schema{}
+						for _, x := range fr.NotIn {
+							ns.Enum = append(ns.Enum, x)
+						}
+						t.Not = ns
+					}
+				}
+			}
+		}
+
 	// Int32:
 	case descriptor.FieldDescriptorProto_TYPE_INT32,
 		descriptor.FieldDescriptorProto_TYPE_UINT32,
@@ -112,6 +243,173 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 			}
 		} else {
 			jsonSchemaType.Type = gojsonschema.TYPE_INTEGER
+		}
+
+		// protovalidate: 32-bit integer family rules -> JSON Schema
+		if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+			if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+				t := getTargetSchema(jsonSchemaType)
+				apply := func(lt, lte, gt, gte any, in []any, notIn []any, cnst any) {
+					if cnst != nil {
+						t.Const = cnst
+					}
+					if lt != nil {
+						t.ExclusiveMaximum = numberFromAny(lt)
+					}
+					if lte != nil {
+						t.Maximum = numberFromAny(lte)
+					}
+					if gt != nil {
+						t.ExclusiveMinimum = numberFromAny(gt)
+					}
+					if gte != nil {
+						t.Minimum = numberFromAny(gte)
+					}
+					if len(in) > 0 {
+						t.Enum = append(t.Enum, in...)
+					}
+					if len(notIn) > 0 {
+						ns := &jsonschema.Schema{Enum: notIn}
+						t.Not = ns
+					}
+				}
+				if ir := fieldRules.GetInt32(); ir != nil {
+					inVals := make([]any, 0, len(ir.In))
+					for _, v := range ir.In {
+						inVals = append(inVals, v)
+					}
+					notVals := make([]any, 0, len(ir.NotIn))
+					for _, v := range ir.NotIn {
+						notVals = append(notVals, v)
+					}
+					var lt, lte, gt, gte any
+					switch v := ir.GetLessThan().(type) {
+					case *protovalidate.Int32Rules_Lt:
+						lt = v.Lt
+					case *protovalidate.Int32Rules_Lte:
+						lte = v.Lte
+					}
+					switch v := ir.GetGreaterThan().(type) {
+					case *protovalidate.Int32Rules_Gt:
+						gt = v.Gt
+					case *protovalidate.Int32Rules_Gte:
+						gte = v.Gte
+					}
+					var cnst any
+					if ir.Const != nil {
+						cnst = *ir.Const
+					}
+					apply(lt, lte, gt, gte, inVals, notVals, cnst)
+				} else if ir := fieldRules.GetSint32(); ir != nil {
+					inVals := make([]any, 0, len(ir.In))
+					for _, v := range ir.In {
+						inVals = append(inVals, v)
+					}
+					notVals := make([]any, 0, len(ir.NotIn))
+					for _, v := range ir.NotIn {
+						notVals = append(notVals, v)
+					}
+					var lt, lte, gt, gte any
+					switch v := ir.GetLessThan().(type) {
+					case *protovalidate.SInt32Rules_Lt:
+						lt = v.Lt
+					case *protovalidate.SInt32Rules_Lte:
+						lte = v.Lte
+					}
+					switch v := ir.GetGreaterThan().(type) {
+					case *protovalidate.SInt32Rules_Gt:
+						gt = v.Gt
+					case *protovalidate.SInt32Rules_Gte:
+						gte = v.Gte
+					}
+					var cnst any
+					if ir.Const != nil {
+						cnst = *ir.Const
+					}
+					apply(lt, lte, gt, gte, inVals, notVals, cnst)
+				} else if ir := fieldRules.GetSfixed32(); ir != nil {
+					inVals := make([]any, 0, len(ir.In))
+					for _, v := range ir.In {
+						inVals = append(inVals, v)
+					}
+					notVals := make([]any, 0, len(ir.NotIn))
+					for _, v := range ir.NotIn {
+						notVals = append(notVals, v)
+					}
+					var lt, lte, gt, gte any
+					switch v := ir.GetLessThan().(type) {
+					case *protovalidate.SFixed32Rules_Lt:
+						lt = v.Lt
+					case *protovalidate.SFixed32Rules_Lte:
+						lte = v.Lte
+					}
+					switch v := ir.GetGreaterThan().(type) {
+					case *protovalidate.SFixed32Rules_Gt:
+						gt = v.Gt
+					case *protovalidate.SFixed32Rules_Gte:
+						gte = v.Gte
+					}
+					var cnst any
+					if ir.Const != nil {
+						cnst = *ir.Const
+					}
+					apply(lt, lte, gt, gte, inVals, notVals, cnst)
+				} else if ir := fieldRules.GetFixed32(); ir != nil {
+					inVals := make([]any, 0, len(ir.In))
+					for _, v := range ir.In {
+						inVals = append(inVals, v)
+					}
+					notVals := make([]any, 0, len(ir.NotIn))
+					for _, v := range ir.NotIn {
+						notVals = append(notVals, v)
+					}
+					var lt, lte, gt, gte any
+					switch v := ir.GetLessThan().(type) {
+					case *protovalidate.Fixed32Rules_Lt:
+						lt = v.Lt
+					case *protovalidate.Fixed32Rules_Lte:
+						lte = v.Lte
+					}
+					switch v := ir.GetGreaterThan().(type) {
+					case *protovalidate.Fixed32Rules_Gt:
+						gt = v.Gt
+					case *protovalidate.Fixed32Rules_Gte:
+						gte = v.Gte
+					}
+					var cnst any
+					if ir.Const != nil {
+						cnst = *ir.Const
+					}
+					apply(lt, lte, gt, gte, inVals, notVals, cnst)
+				} else if ir := fieldRules.GetUint32(); ir != nil {
+					inVals := make([]any, 0, len(ir.In))
+					for _, v := range ir.In {
+						inVals = append(inVals, v)
+					}
+					notVals := make([]any, 0, len(ir.NotIn))
+					for _, v := range ir.NotIn {
+						notVals = append(notVals, v)
+					}
+					var lt, lte, gt, gte any
+					switch v := ir.GetLessThan().(type) {
+					case *protovalidate.UInt32Rules_Lt:
+						lt = v.Lt
+					case *protovalidate.UInt32Rules_Lte:
+						lte = v.Lte
+					}
+					switch v := ir.GetGreaterThan().(type) {
+					case *protovalidate.UInt32Rules_Gt:
+						gt = v.Gt
+					case *protovalidate.UInt32Rules_Gte:
+						gte = v.Gte
+					}
+					var cnst any
+					if ir.Const != nil {
+						cnst = *ir.Const
+					}
+					apply(lt, lte, gt, gte, inVals, notVals, cnst)
+				}
+			}
 		}
 
 	// Int64:
@@ -142,6 +440,174 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 				}
 			} else {
 				jsonSchemaType.Type = gojsonschema.TYPE_STRING
+			}
+		}
+
+		// protovalidate: 64-bit integer family rules -> JSON Schema (only when emitted as integer)
+		if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+			if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+				t := getTargetSchema(jsonSchemaType)
+				if t.Type == gojsonschema.TYPE_INTEGER { // skip if encoded as string
+					apply := func(lt, lte, gt, gte any, in []any, notIn []any, cnst any) {
+						if cnst != nil {
+							t.Const = cnst
+						}
+						if lt != nil {
+							t.ExclusiveMaximum = numberFromAny(lt)
+						}
+						if lte != nil {
+							t.Maximum = numberFromAny(lte)
+						}
+						if gt != nil {
+							t.ExclusiveMinimum = numberFromAny(gt)
+						}
+						if gte != nil {
+							t.Minimum = numberFromAny(gte)
+						}
+						if len(in) > 0 {
+							t.Enum = append(t.Enum, in...)
+						}
+						if len(notIn) > 0 {
+							t.Not = &jsonschema.Schema{Enum: notIn}
+						}
+					}
+					if ir := fieldRules.GetInt64(); ir != nil {
+						inVals := make([]any, 0, len(ir.In))
+						for _, v := range ir.In {
+							inVals = append(inVals, v)
+						}
+						notVals := make([]any, 0, len(ir.NotIn))
+						for _, v := range ir.NotIn {
+							notVals = append(notVals, v)
+						}
+						var lt, lte, gt, gte any
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.Int64Rules_Lt:
+							lt = v.Lt
+						case *protovalidate.Int64Rules_Lte:
+							lte = v.Lte
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.Int64Rules_Gt:
+							gt = v.Gt
+						case *protovalidate.Int64Rules_Gte:
+							gte = v.Gte
+						}
+						var cnst any
+						if ir.Const != nil {
+							cnst = *ir.Const
+						}
+						apply(lt, lte, gt, gte, inVals, notVals, cnst)
+					} else if ir := fieldRules.GetUint64(); ir != nil {
+						inVals := make([]any, 0, len(ir.In))
+						for _, v := range ir.In {
+							inVals = append(inVals, v)
+						}
+						notVals := make([]any, 0, len(ir.NotIn))
+						for _, v := range ir.NotIn {
+							notVals = append(notVals, v)
+						}
+						var lt, lte, gt, gte any
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.UInt64Rules_Lt:
+							lt = v.Lt
+						case *protovalidate.UInt64Rules_Lte:
+							lte = v.Lte
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.UInt64Rules_Gt:
+							gt = v.Gt
+						case *protovalidate.UInt64Rules_Gte:
+							gte = v.Gte
+						}
+						var cnst any
+						if ir.Const != nil {
+							cnst = *ir.Const
+						}
+						apply(lt, lte, gt, gte, inVals, notVals, cnst)
+					} else if ir := fieldRules.GetSfixed64(); ir != nil {
+						inVals := make([]any, 0, len(ir.In))
+						for _, v := range ir.In {
+							inVals = append(inVals, v)
+						}
+						notVals := make([]any, 0, len(ir.NotIn))
+						for _, v := range ir.NotIn {
+							notVals = append(notVals, v)
+						}
+						var lt, lte, gt, gte any
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.SFixed64Rules_Lt:
+							lt = v.Lt
+						case *protovalidate.SFixed64Rules_Lte:
+							lte = v.Lte
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.SFixed64Rules_Gt:
+							gt = v.Gt
+						case *protovalidate.SFixed64Rules_Gte:
+							gte = v.Gte
+						}
+						var cnst any
+						if ir.Const != nil {
+							cnst = *ir.Const
+						}
+						apply(lt, lte, gt, gte, inVals, notVals, cnst)
+					} else if ir := fieldRules.GetFixed64(); ir != nil {
+						inVals := make([]any, 0, len(ir.In))
+						for _, v := range ir.In {
+							inVals = append(inVals, v)
+						}
+						notVals := make([]any, 0, len(ir.NotIn))
+						for _, v := range ir.NotIn {
+							notVals = append(notVals, v)
+						}
+						var lt, lte, gt, gte any
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.Fixed64Rules_Lt:
+							lt = v.Lt
+						case *protovalidate.Fixed64Rules_Lte:
+							lte = v.Lte
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.Fixed64Rules_Gt:
+							gt = v.Gt
+						case *protovalidate.Fixed64Rules_Gte:
+							gte = v.Gte
+						}
+						var cnst any
+						if ir.Const != nil {
+							cnst = *ir.Const
+						}
+						apply(lt, lte, gt, gte, inVals, notVals, cnst)
+					} else if ir := fieldRules.GetSint64(); ir != nil {
+						inVals := make([]any, 0, len(ir.In))
+						for _, v := range ir.In {
+							inVals = append(inVals, v)
+						}
+						notVals := make([]any, 0, len(ir.NotIn))
+						for _, v := range ir.NotIn {
+							notVals = append(notVals, v)
+						}
+						var lt, lte, gt, gte any
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.SInt64Rules_Lt:
+							lt = v.Lt
+						case *protovalidate.SInt64Rules_Lte:
+							lte = v.Lte
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.SInt64Rules_Gt:
+							gt = v.Gt
+						case *protovalidate.SInt64Rules_Gte:
+							gte = v.Gte
+						}
+						var cnst any
+						if ir.Const != nil {
+							cnst = *ir.Const
+						}
+						apply(lt, lte, gt, gte, inVals, notVals, cnst)
+					}
+				}
 			}
 		}
 
@@ -180,6 +646,48 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 					stringDef.MaxLength = stringRules.MaxLen
 					stringDef.MinLength = stringRules.MinLen
 					stringDef.Pattern = stringRules.GetPattern()
+
+					// len (exact length in characters)
+					if stringRules.Len != nil {
+						l := *stringRules.Len
+						stringDef.MinLength = &l
+						stringDef.MaxLength = &l
+					}
+					// const
+					if stringRules.Const != nil {
+						stringDef.Const = *stringRules.Const
+					}
+					// in (enum)
+					if len(stringRules.In) > 0 {
+						for _, v := range stringRules.In {
+							stringDef.Enum = append(stringDef.Enum, v)
+						}
+					}
+					// not_in (not enum)
+					if len(stringRules.NotIn) > 0 && stringDef.Not == nil {
+						notSchema := &jsonschema.Schema{}
+						for _, v := range stringRules.NotIn {
+							notSchema.Enum = append(notSchema.Enum, v)
+						}
+						stringDef.Not = notSchema
+					}
+					// Well-known simple formats that map 1:1 to JSON Schema
+					switch {
+					case stringRules.GetEmail():
+						stringDef.Format = "email"
+					case stringRules.GetHostname():
+						stringDef.Format = "hostname"
+					case stringRules.GetIpv4():
+						stringDef.Format = "ipv4"
+					case stringRules.GetIpv6():
+						stringDef.Format = "ipv6"
+					case stringRules.GetUri():
+						stringDef.Format = "uri"
+					case stringRules.GetUriRef():
+						stringDef.Format = "uri-reference"
+					case stringRules.GetUuid():
+						stringDef.Format = "uuid"
+					}
 				}
 			}
 		}
@@ -235,6 +743,35 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 
 		jsonSchemaType = &enumSchema
 
+		// protovalidate: enum rules -> JSON Schema (defined_only is a no-op)
+		if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+			if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+				if er := fieldRules.GetEnum(); er != nil {
+					// not_in -> not: { enum: [...] }
+					if len(er.NotIn) > 0 {
+						ns := &jsonschema.Schema{}
+						// Disallow numeric codes
+						for _, v := range er.NotIn {
+							ns.Enum = append(ns.Enum, v)
+						}
+						// Also disallow their string names (where resolvable)
+						if matchedEnum != nil {
+							for _, ev := range matchedEnum.Value {
+								for _, dis := range er.NotIn {
+									if ev.GetNumber() == dis {
+										ns.Enum = append(ns.Enum, ev.GetName())
+									}
+								}
+							}
+						}
+
+						// Apply at the enum schema level so it covers both string and integer forms
+						jsonSchemaType.Not = ns
+					}
+				}
+			}
+		}
+
 	// Bool:
 	case descriptor.FieldDescriptorProto_TYPE_BOOL:
 		if messageFlags.AllowNullValues {
@@ -244,6 +781,15 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 			}
 		} else {
 			jsonSchemaType.Type = gojsonschema.TYPE_BOOLEAN
+		}
+		// protovalidate: support bool.const
+		if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+			if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+				if br := fieldRules.GetBool(); br != nil && br.Const != nil {
+					t := getTargetSchema(jsonSchemaType)
+					t.Const = *br.Const
+				}
+			}
 		}
 
 	// Group (object):
@@ -294,6 +840,25 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 			}
 		}
 
+		// protovalidate: repeated rules -> minItems/maxItems/uniqueItems
+		if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+			if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+				if rr := fieldRules.GetRepeated(); rr != nil {
+					if rr.MinItems != nil {
+						mi := *rr.MinItems
+						jsonSchemaType.MinItems = &mi
+					}
+					if rr.MaxItems != nil {
+						ma := *rr.MaxItems
+						jsonSchemaType.MaxItems = &ma
+					}
+					if rr.Unique != nil {
+						jsonSchemaType.UniqueItems = rr.GetUnique()
+					}
+				}
+			}
+		}
+
 		if len(jsonSchemaType.Enum) > 0 {
 			jsonSchemaType.Items.Enum = jsonSchemaType.Enum
 			jsonSchemaType.Enum = nil
@@ -301,6 +866,467 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 		} else {
 			jsonSchemaType.Items.Type = jsonSchemaType.Type
 			jsonSchemaType.Items.OneOf = jsonSchemaType.OneOf
+		}
+
+		// If the element schema carried a Not constraint (e.g., enum.not_in), move it to items
+		if jsonSchemaType.Not != nil {
+			jsonSchemaType.Items.Not = jsonSchemaType.Not
+			jsonSchemaType.Not = nil
+		}
+
+		// protovalidate: repeated.items (FieldRules) -> apply element constraints on Items
+		if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+			if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+				if rr := fieldRules.GetRepeated(); rr != nil && rr.Items != nil {
+					// Work on the concrete element schema (avoid null branches in OneOf)
+					it := getTargetSchema(jsonSchemaType.Items)
+
+					// Helper to add/merge not-in enums
+					appendNotEnum := func(values []any) {
+						if len(values) == 0 {
+							return
+						}
+						if it.Not == nil {
+							it.Not = &jsonschema.Schema{Enum: append([]any{}, values...)}
+							return
+						}
+						it.Not.Enum = append(it.Not.Enum, values...)
+					}
+
+					// Strings
+					if sr := rr.Items.GetString(); sr != nil {
+						if sr.MaxLen != nil {
+							it.MaxLength = sr.MaxLen
+						}
+						if sr.MinLen != nil {
+							it.MinLength = sr.MinLen
+						}
+						if sr.Len != nil { // exact length
+							l := *sr.Len
+							it.MinLength = &l
+							it.MaxLength = &l
+						}
+						if p := sr.GetPattern(); p != "" {
+							it.Pattern = p
+						}
+						if sr.Const != nil {
+							it.Const = *sr.Const
+						}
+						if len(sr.In) > 0 {
+							for _, v := range sr.In {
+								it.Enum = append(it.Enum, v)
+							}
+						}
+						if len(sr.NotIn) > 0 {
+							vals := make([]any, 0, len(sr.NotIn))
+							for _, v := range sr.NotIn {
+								vals = append(vals, v)
+							}
+							appendNotEnum(vals)
+						}
+						// Simple well-known formats
+						switch {
+						case sr.GetEmail():
+							it.Format = "email"
+						case sr.GetHostname():
+							it.Format = "hostname"
+						case sr.GetIpv4():
+							it.Format = "ipv4"
+						case sr.GetIpv6():
+							it.Format = "ipv6"
+						case sr.GetUri():
+							it.Format = "uri"
+						case sr.GetUriRef():
+							it.Format = "uri-reference"
+						case sr.GetUuid():
+							it.Format = "uuid"
+						}
+					}
+
+					// Bool
+					if br := rr.Items.GetBool(); br != nil {
+						if br.Const != nil {
+							it.Const = *br.Const
+						}
+					}
+
+					// Float / Double
+					if dr := rr.Items.GetDouble(); dr != nil {
+						if dr.Const != nil {
+							it.Const = *dr.Const
+						}
+						switch v := dr.GetLessThan().(type) {
+						case *protovalidate.DoubleRules_Lt:
+							it.ExclusiveMaximum = numberFromFloat64(v.Lt)
+						case *protovalidate.DoubleRules_Lte:
+							it.Maximum = numberFromFloat64(v.Lte)
+						}
+						switch v := dr.GetGreaterThan().(type) {
+						case *protovalidate.DoubleRules_Gt:
+							it.ExclusiveMinimum = numberFromFloat64(v.Gt)
+						case *protovalidate.DoubleRules_Gte:
+							it.Minimum = numberFromFloat64(v.Gte)
+						}
+						if len(dr.In) > 0 {
+							for _, v := range dr.In {
+								it.Enum = append(it.Enum, v)
+							}
+						}
+						if len(dr.NotIn) > 0 {
+							vals := make([]any, 0, len(dr.NotIn))
+							for _, v := range dr.NotIn {
+								vals = append(vals, v)
+							}
+							appendNotEnum(vals)
+						}
+					} else if fr := rr.Items.GetFloat(); fr != nil {
+						if fr.Const != nil {
+							it.Const = *fr.Const
+						}
+						switch v := fr.GetLessThan().(type) {
+						case *protovalidate.FloatRules_Lt:
+							it.ExclusiveMaximum = numberFromFloat32(v.Lt)
+						case *protovalidate.FloatRules_Lte:
+							it.Maximum = numberFromFloat32(v.Lte)
+						}
+						switch v := fr.GetGreaterThan().(type) {
+						case *protovalidate.FloatRules_Gt:
+							it.ExclusiveMinimum = numberFromFloat32(v.Gt)
+						case *protovalidate.FloatRules_Gte:
+							it.Minimum = numberFromFloat32(v.Gte)
+						}
+						if len(fr.In) > 0 {
+							for _, v := range fr.In {
+								it.Enum = append(it.Enum, v)
+							}
+						}
+						if len(fr.NotIn) > 0 {
+							vals := make([]any, 0, len(fr.NotIn))
+							for _, v := range fr.NotIn {
+								vals = append(vals, v)
+							}
+							appendNotEnum(vals)
+						}
+					}
+
+					// 32-bit integers
+					if ir := rr.Items.GetInt32(); ir != nil {
+						if ir.Const != nil {
+							it.Const = *ir.Const
+						}
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.Int32Rules_Lt:
+							it.ExclusiveMaximum = numberFromInt64(int64(v.Lt))
+						case *protovalidate.Int32Rules_Lte:
+							it.Maximum = numberFromInt64(int64(v.Lte))
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.Int32Rules_Gt:
+							it.ExclusiveMinimum = numberFromInt64(int64(v.Gt))
+						case *protovalidate.Int32Rules_Gte:
+							it.Minimum = numberFromInt64(int64(v.Gte))
+						}
+						if len(ir.In) > 0 {
+							for _, v := range ir.In {
+								it.Enum = append(it.Enum, v)
+							}
+						}
+						if len(ir.NotIn) > 0 {
+							vals := make([]any, 0, len(ir.NotIn))
+							for _, v := range ir.NotIn {
+								vals = append(vals, v)
+							}
+							appendNotEnum(vals)
+						}
+					} else if ir := rr.Items.GetSint32(); ir != nil {
+						if ir.Const != nil {
+							it.Const = *ir.Const
+						}
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.SInt32Rules_Lt:
+							it.ExclusiveMaximum = numberFromInt64(int64(v.Lt))
+						case *protovalidate.SInt32Rules_Lte:
+							it.Maximum = numberFromInt64(int64(v.Lte))
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.SInt32Rules_Gt:
+							it.ExclusiveMinimum = numberFromInt64(int64(v.Gt))
+						case *protovalidate.SInt32Rules_Gte:
+							it.Minimum = numberFromInt64(int64(v.Gte))
+						}
+						if len(ir.In) > 0 {
+							for _, v := range ir.In {
+								it.Enum = append(it.Enum, v)
+							}
+						}
+						if len(ir.NotIn) > 0 {
+							vals := make([]any, 0, len(ir.NotIn))
+							for _, v := range ir.NotIn {
+								vals = append(vals, v)
+							}
+							appendNotEnum(vals)
+						}
+					} else if ir := rr.Items.GetFixed32(); ir != nil {
+						if ir.Const != nil {
+							it.Const = *ir.Const
+						}
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.Fixed32Rules_Lt:
+							it.ExclusiveMaximum = numberFromUint64(uint64(v.Lt))
+						case *protovalidate.Fixed32Rules_Lte:
+							it.Maximum = numberFromUint64(uint64(v.Lte))
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.Fixed32Rules_Gt:
+							it.ExclusiveMinimum = numberFromUint64(uint64(v.Gt))
+						case *protovalidate.Fixed32Rules_Gte:
+							it.Minimum = numberFromUint64(uint64(v.Gte))
+						}
+						if len(ir.In) > 0 {
+							for _, v := range ir.In {
+								it.Enum = append(it.Enum, v)
+							}
+						}
+						if len(ir.NotIn) > 0 {
+							vals := make([]any, 0, len(ir.NotIn))
+							for _, v := range ir.NotIn {
+								vals = append(vals, v)
+							}
+							appendNotEnum(vals)
+						}
+					} else if ir := rr.Items.GetSfixed32(); ir != nil {
+						if ir.Const != nil {
+							it.Const = *ir.Const
+						}
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.SFixed32Rules_Lt:
+							it.ExclusiveMaximum = numberFromInt64(int64(v.Lt))
+						case *protovalidate.SFixed32Rules_Lte:
+							it.Maximum = numberFromInt64(int64(v.Lte))
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.SFixed32Rules_Gt:
+							it.ExclusiveMinimum = numberFromInt64(int64(v.Gt))
+						case *protovalidate.SFixed32Rules_Gte:
+							it.Minimum = numberFromInt64(int64(v.Gte))
+						}
+						if len(ir.In) > 0 {
+							for _, v := range ir.In {
+								it.Enum = append(it.Enum, v)
+							}
+						}
+						if len(ir.NotIn) > 0 {
+							vals := make([]any, 0, len(ir.NotIn))
+							for _, v := range ir.NotIn {
+								vals = append(vals, v)
+							}
+							appendNotEnum(vals)
+						}
+					} else if ir := rr.Items.GetUint32(); ir != nil {
+						if ir.Const != nil {
+							it.Const = *ir.Const
+						}
+						switch v := ir.GetLessThan().(type) {
+						case *protovalidate.UInt32Rules_Lt:
+							it.ExclusiveMaximum = numberFromUint64(uint64(v.Lt))
+						case *protovalidate.UInt32Rules_Lte:
+							it.Maximum = numberFromUint64(uint64(v.Lte))
+						}
+						switch v := ir.GetGreaterThan().(type) {
+						case *protovalidate.UInt32Rules_Gt:
+							it.ExclusiveMinimum = numberFromUint64(uint64(v.Gt))
+						case *protovalidate.UInt32Rules_Gte:
+							it.Minimum = numberFromUint64(uint64(v.Gte))
+						}
+						if len(ir.In) > 0 {
+							for _, v := range ir.In {
+								it.Enum = append(it.Enum, v)
+							}
+						}
+						if len(ir.NotIn) > 0 {
+							vals := make([]any, 0, len(ir.NotIn))
+							for _, v := range ir.NotIn {
+								vals = append(vals, v)
+							}
+							appendNotEnum(vals)
+						}
+					}
+
+					// 64-bit integers (apply only if items emitted as integer)
+					if it.Type == gojsonschema.TYPE_INTEGER {
+						if ir := rr.Items.GetInt64(); ir != nil {
+							if ir.Const != nil {
+								it.Const = *ir.Const
+							}
+							switch v := ir.GetLessThan().(type) {
+							case *protovalidate.Int64Rules_Lt:
+								it.ExclusiveMaximum = numberFromInt64(v.Lt)
+							case *protovalidate.Int64Rules_Lte:
+								it.Maximum = numberFromInt64(v.Lte)
+							}
+							switch v := ir.GetGreaterThan().(type) {
+							case *protovalidate.Int64Rules_Gt:
+								it.ExclusiveMinimum = numberFromInt64(v.Gt)
+							case *protovalidate.Int64Rules_Gte:
+								it.Minimum = numberFromInt64(v.Gte)
+							}
+							if len(ir.In) > 0 {
+								for _, v := range ir.In {
+									it.Enum = append(it.Enum, v)
+								}
+							}
+							if len(ir.NotIn) > 0 {
+								vals := make([]any, 0, len(ir.NotIn))
+								for _, v := range ir.NotIn {
+									vals = append(vals, v)
+								}
+								appendNotEnum(vals)
+							}
+						} else if ir := rr.Items.GetUint64(); ir != nil {
+							if ir.Const != nil {
+								it.Const = *ir.Const
+							}
+							switch v := ir.GetLessThan().(type) {
+							case *protovalidate.UInt64Rules_Lt:
+								it.ExclusiveMaximum = numberFromUint64(v.Lt)
+							case *protovalidate.UInt64Rules_Lte:
+								it.Maximum = numberFromUint64(v.Lte)
+							}
+							switch v := ir.GetGreaterThan().(type) {
+							case *protovalidate.UInt64Rules_Gt:
+								it.ExclusiveMinimum = numberFromUint64(v.Gt)
+							case *protovalidate.UInt64Rules_Gte:
+								it.Minimum = numberFromUint64(v.Gte)
+							}
+							if len(ir.In) > 0 {
+								for _, v := range ir.In {
+									it.Enum = append(it.Enum, v)
+								}
+							}
+							if len(ir.NotIn) > 0 {
+								vals := make([]any, 0, len(ir.NotIn))
+								for _, v := range ir.NotIn {
+									vals = append(vals, v)
+								}
+								appendNotEnum(vals)
+							}
+						} else if ir := rr.Items.GetFixed64(); ir != nil {
+							if ir.Const != nil {
+								it.Const = *ir.Const
+							}
+							switch v := ir.GetLessThan().(type) {
+							case *protovalidate.Fixed64Rules_Lt:
+								it.ExclusiveMaximum = numberFromUint64(v.Lt)
+							case *protovalidate.Fixed64Rules_Lte:
+								it.Maximum = numberFromUint64(v.Lte)
+							}
+							switch v := ir.GetGreaterThan().(type) {
+							case *protovalidate.Fixed64Rules_Gt:
+								it.ExclusiveMinimum = numberFromUint64(v.Gt)
+							case *protovalidate.Fixed64Rules_Gte:
+								it.Minimum = numberFromUint64(v.Gte)
+							}
+							if len(ir.In) > 0 {
+								for _, v := range ir.In {
+									it.Enum = append(it.Enum, v)
+								}
+							}
+							if len(ir.NotIn) > 0 {
+								vals := make([]any, 0, len(ir.NotIn))
+								for _, v := range ir.NotIn {
+									vals = append(vals, v)
+								}
+								appendNotEnum(vals)
+							}
+						} else if ir := rr.Items.GetSfixed64(); ir != nil {
+							if ir.Const != nil {
+								it.Const = *ir.Const
+							}
+							switch v := ir.GetLessThan().(type) {
+							case *protovalidate.SFixed64Rules_Lt:
+								it.ExclusiveMaximum = numberFromInt64(v.Lt)
+							case *protovalidate.SFixed64Rules_Lte:
+								it.Maximum = numberFromInt64(v.Lte)
+							}
+							switch v := ir.GetGreaterThan().(type) {
+							case *protovalidate.SFixed64Rules_Gt:
+								it.ExclusiveMinimum = numberFromInt64(v.Gt)
+							case *protovalidate.SFixed64Rules_Gte:
+								it.Minimum = numberFromInt64(v.Gte)
+							}
+							if len(ir.In) > 0 {
+								for _, v := range ir.In {
+									it.Enum = append(it.Enum, v)
+								}
+							}
+							if len(ir.NotIn) > 0 {
+								vals := make([]any, 0, len(ir.NotIn))
+								for _, v := range ir.NotIn {
+									vals = append(vals, v)
+								}
+								appendNotEnum(vals)
+							}
+						} else if ir := rr.Items.GetSint64(); ir != nil {
+							if ir.Const != nil {
+								it.Const = *ir.Const
+							}
+							switch v := ir.GetLessThan().(type) {
+							case *protovalidate.SInt64Rules_Lt:
+								it.ExclusiveMaximum = numberFromInt64(v.Lt)
+							case *protovalidate.SInt64Rules_Lte:
+								it.Maximum = numberFromInt64(v.Lte)
+							}
+							switch v := ir.GetGreaterThan().(type) {
+							case *protovalidate.SInt64Rules_Gt:
+								it.ExclusiveMinimum = numberFromInt64(v.Gt)
+							case *protovalidate.SInt64Rules_Gte:
+								it.Minimum = numberFromInt64(v.Gte)
+							}
+							if len(ir.In) > 0 {
+								for _, v := range ir.In {
+									it.Enum = append(it.Enum, v)
+								}
+							}
+							if len(ir.NotIn) > 0 {
+								vals := make([]any, 0, len(ir.NotIn))
+								for _, v := range ir.NotIn {
+									vals = append(vals, v)
+								}
+								appendNotEnum(vals)
+							}
+						}
+					}
+
+					// Enum rules on items
+					if er := rr.Items.GetEnum(); er != nil {
+						// not_in -> not: { enum: [...] }
+						if len(er.NotIn) > 0 {
+							vals := make([]any, 0, len(er.NotIn))
+							for _, v := range er.NotIn {
+								vals = append(vals, v)
+							}
+							// Also try to add string names when available
+							if matchedEnum, _, ok := c.lookupEnum(curPkg, strings.TrimPrefix(desc.GetTypeName(), ".")); ok && matchedEnum != nil {
+								for _, ev := range matchedEnum.Value {
+									for _, dis := range er.NotIn {
+										if ev.GetNumber() == dis {
+											vals = append(vals, ev.GetName())
+										}
+									}
+								}
+							}
+							appendNotEnum(vals)
+						}
+						// in -> restrict to subset by setting enum directly (only when present)
+						if len(er.In) > 0 {
+							it.Enum = nil
+							for _, v := range er.In {
+								it.Enum = append(it.Enum, v)
+							}
+						}
+					}
+				}
+			}
 		}
 
 		if messageFlags.AllowNullValues {
@@ -351,10 +1377,45 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 
 			jsonSchemaType.AdditionalProperties = value
 
+			// protovalidate: map min_pairs/max_pairs -> minProperties/maxProperties
+			if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+				if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+					if mr := fieldRules.GetMap(); mr != nil {
+						if mr.MinPairs != nil {
+							mp := *mr.MinPairs
+							jsonSchemaType.MinProperties = &mp
+						}
+						if mr.MaxPairs != nil {
+							mp := *mr.MaxPairs
+							jsonSchemaType.MaxProperties = &mp
+						}
+					}
+				}
+			}
+
 		// Arrays:
 		case desc.GetLabel() == descriptor.FieldDescriptorProto_LABEL_REPEATED:
 			jsonSchemaType.Items = recursedJSONSchemaType
 			jsonSchemaType.Type = gojsonschema.TYPE_ARRAY
+
+			// protovalidate: repeated rules -> minItems/maxItems/uniqueItems for repeated messages
+			if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+				if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+					if rr := fieldRules.GetRepeated(); rr != nil {
+						if rr.MinItems != nil {
+							mi := *rr.MinItems
+							jsonSchemaType.MinItems = &mi
+						}
+						if rr.MaxItems != nil {
+							ma := *rr.MaxItems
+							jsonSchemaType.MaxItems = &ma
+						}
+						if rr.Unique != nil {
+							jsonSchemaType.UniqueItems = rr.GetUnique()
+						}
+					}
+				}
+			}
 
 			// Build up the list of required fields:
 			if messageFlags.AllFieldsRequired && len(recursedJSONSchemaType.OneOf) == 0 && recursedJSONSchemaType.Properties != nil {
