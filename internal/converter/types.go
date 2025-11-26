@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	protovalidate "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	"github.com/invopop/jsonschema"
 	"github.com/wk8/go-ordered-map/v2"
 	"github.com/xeipuuv/gojsonschema"
@@ -165,6 +166,17 @@ func (c *Converter) convertField(curPkg *ProtoPackage, desc *descriptor.FieldDes
 		if opt := proto.GetExtension(desc.GetOptions(), protoc_gen_validate.E_Rules); opt != nil {
 			if fieldRules, ok := opt.(*protoc_gen_validate.FieldRules); fieldRules != nil && ok {
 				if stringRules := fieldRules.GetString_(); stringRules != nil {
+					stringDef.MaxLength = stringRules.MaxLen
+					stringDef.MinLength = stringRules.MinLen
+					stringDef.Pattern = stringRules.GetPattern()
+				}
+			}
+		}
+
+		// Custom field options from protovalidate:
+		if opt := proto.GetExtension(desc.GetOptions(), protovalidate.E_Field); opt != nil {
+			if fieldRules, ok := opt.(*protovalidate.FieldRules); fieldRules != nil && ok {
+				if stringRules := fieldRules.GetString(); stringRules != nil {
 					stringDef.MaxLength = stringRules.MaxLen
 					stringDef.MinLength = stringRules.MinLen
 					stringDef.Pattern = stringRules.GetPattern()

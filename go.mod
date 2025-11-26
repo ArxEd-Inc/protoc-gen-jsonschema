@@ -5,6 +5,7 @@ go 1.23
 toolchain go1.24.2
 
 require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.10-20250912141014-52f32327d4b0.1
 	github.com/envoyproxy/protoc-gen-validate v0.10.1
 	github.com/fatih/camelcase v1.0.0
 	github.com/iancoleman/strcase v0.2.0
